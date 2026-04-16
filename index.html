@@ -599,24 +599,18 @@ function toast(msg,type){
 }
 
 // ── Init ──
-(function(){
+(function(){  // AUTO-CONNECTED
+  const _SB_URL='https://nhachgkdkjzjbwizkiop.supabase.co';
+  const _SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5oYWNoZ2tka2p6amJ3aXpraW9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNzYzNDMsImV4cCI6MjA5MTg1MjM0M30.0ZbMpvPVyv0mFEXLCmLdi2z7p2DXbzyBN2SjN4LsFSg';
   const now=new Date();
   currentYear=now.getFullYear();
   currentMonth=now.getMonth()+1;
   document.getElementById('f-date').value=now.toISOString().slice(0,10);
   loadConfig();
 
-  const {url,key}=getCredentials();
-  if(url&&key){
-    try{
-      supabase=window.supabase.createClient(url,key,{auth:{persistSession:false}});
-    }catch(e){ console.error('init error',e); }
-    document.getElementById('setup-overlay').classList.add('hidden');
-    render();
-  } else {
-    document.getElementById('sb-url').value=url;
-    document.getElementById('sb-key').value=key;
-  }
+  supabase=window.supabase.createClient(_SB_URL,_SB_KEY,{auth:{persistSession:false}});
+  document.getElementById('setup-overlay').classList.add('hidden');
+  render();
 })();
 
 document.addEventListener('keydown',e=>{
