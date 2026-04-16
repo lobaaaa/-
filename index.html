@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>开心❤桌游吧 · 利润分配</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --orange: #FF8030;
+    --bg: #0f0f0f; --bg2: #161616; --bg3: #1e1e1e;
+    --line: rgba(255,255,255,0.07); --line2: rgba(255,255,255,0.12);
+    --text: #e8e6e0; --text2: #888; --text3: #555;
+    --green: #4caf7d; --red: #e05555; --yellow: #d4a017;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Noto Sans SC', sans-serif; font-weight: 300; min-height: 100vh; }
+
+  /* ── Setup overlay ── */
+  #setup-overlay {
+    position: fixed; inset: 0; background: rgba(10,10,10,0.97);
+    display: flex; align-items: center; justify-content: center; z-index: 999;
+    padding: 20px;
+  }
+  #setup-overlay.hidden { display: none; }
+  .setup-box {
+    background: var(--bg2); border: 1px solid var(--line2); border-radius: 12px;
+    padding: 32px; max-width: 480px; width: 100%;
+  }
+  .setup-box h2 { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+  .setup-box p { font-size: 12px; color: var(--text3); margin-bottom: 20px; line-height: 1.7; }
+  .setup-box a { color: var(--orange); text-decoration: none; }
+  .setup-field { margin-bottom: 14px; }
+  .setup-field label { display: block; font-size: 11px; color: var(--text3); margin-bottom: 5px; letter-spacing: 0.08em; }
+  .setup-field input {
+    width: 100%; background: var(--bg3); border: 1px solid var(--line2); border-radius: 6px;
+    color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px;
+    padding: 9px 12px; outline: none;
+  }
+  .setup-field input:focus { border-color: var(--orange); }
+  .btn-connect {
+    width: 100%; background: var(--orange); color: #fff; border: none; border-radius: 6px;
+    padding: 11px; font-size: 13px; font-family: 'Noto Sans SC', sans-serif;
+    cursor: pointer; transition: background 0.15s; margin-top: 4px;
+  }
+  .btn-connect:hover { background: #e06e22; }
+  .setup-status { font-size: 12px; color: var(--text3); margin-top: 10px; min-height: 18px; text-align: center; }
+  .setup-status.err { color: var(--red); }
+  .setup-status.ok  { color: var(--green); }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--bg2); border: 1px solid var(--line2); border-radius: 6px;
+    padding: 10px 20px; font-size: 13px; z-index: 200;
+    opacity: 0; transition: opacity 0.25s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: rgba(15,15,15,0.95);
+    backdrop-filter: blur(8px); z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-mark {
+    width: 32px; height: 32px; border: 1.5px solid var(--orange); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+  }
+  .logo-text { font-size: 14px; font-weight: 400; letter-spacing: 0.05em; }
+  .logo-sub { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text3); letter-spacing: 0.1em; }
+  .header-right { display: flex; align-items: center; gap: 14px; }
+  .month-nav { display: flex; align-items: center; gap: 10px; }
+  .month-nav button {
+    background: none; border: 1px solid var(--line2); color: var(--text2);
+    width: 28px; height: 28px; border-radius: 4px; cursor: pointer; font-size: 15px;
+    transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+  }
+  .month-nav button:hover { border-color: var(--orange); color: var(--orange); }
+  #month-label { font-family: 'DM Mono', monospace; font-size: 13px; min-width: 90px; text-align: center; }
+  .btn-settings {
+    background: none; border: 1px solid var(--line2); color: var(--text3);
+    width: 28px; height: 28px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+  }
+  .btn-settings:hover { border-color: var(--orange); color: var(--orange); }
+
+  /* ── Loader ── */
+  .loading-bar {
+    height: 2px; background: var(--orange);
+    position: fixed; top: 0; left: 0; z-index: 300;
+    transition: width 0.3s ease; width: 0%;
+  }
+  .loading-bar.done { opacity: 0; transition: opacity 0.5s 0.2s; }
+
+  /* ── Layout ── */
+  .container { padding: 22px 32px; max-width: 1140px; margin: 0 auto; }
+
+  /* Settings */
+  .settings-bar {
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 20px; margin-bottom: 18px;
+    display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+  }
+  .settings-title { font-size: 10px; color: var(--text3); letter-spacing: 0.15em; text-transform: uppercase; margin-right: 24px; white-space: nowrap; }
+  .setting-group { display: flex; align-items: center; gap: 10px; padding: 0 20px; border-left: 1px solid var(--line2); }
+  .setting-lbl { font-size: 12px; color: var(--text2); white-space: nowrap; }
+  .setting-val { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--orange); min-width: 38px; text-align: right; }
+  input[type="range"] {
+    -webkit-appearance: none; width: 100px; height: 4px;
+    background: var(--bg3); border-radius: 2px; outline: none; cursor: pointer; border: 1px solid var(--line2);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px;
+    background: var(--orange); border-radius: 50%; cursor: pointer; transition: transform 0.1s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+  .salary-input {
+    background: var(--bg3); border: 1px solid var(--line2); border-radius: 4px;
+    color: var(--orange); font-family: 'DM Mono', monospace; font-size: 13px;
+    padding: 4px 8px; width: 76px; outline: none; text-align: right;
+  }
+  .salary-input:focus { border-color: var(--orange); }
+
+  /* Cards */
+  .summary-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 18px; }
+  .card {
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; position: relative; overflow: hidden; transition: border-color 0.2s;
+  }
+  .card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--orange); opacity:0; transition:opacity 0.2s; }
+  .card:hover::before { opacity:1; }
+  .card-lbl { font-size: 10px; color: var(--text3); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 7px; }
+  .card-val { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; line-height: 1; color: var(--text); }
+  .card-val.orange{color:var(--orange);} .card-val.green{color:var(--green);} .card-val.red{color:var(--red);}
+  .card-sub { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text3); margin-top: 4px; }
+
+  /* Bar */
+  .dist-wrap { background:var(--bg2); border:1px solid var(--line); border-radius:8px; padding:16px 20px; margin-bottom:18px; }
+  .dist-lbl { font-size:10px; color:var(--text3); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:10px; }
+  .dist-bar { height:8px; border-radius:4px; display:flex; overflow:hidden; gap:2px; margin-bottom:10px; }
+  .dist-bar div { border-radius:2px; transition:width 0.4s ease; min-width:0; }
+  .dist-legend { display:flex; gap:16px; flex-wrap:wrap; }
+  .leg-item { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text2); }
+  .leg-dot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+  .leg-val { font-family:'DM Mono',monospace; color:var(--text); margin-left:1px; }
+
+  /* Two-col */
+  .main-cols { display:grid; grid-template-columns:1fr 340px; gap:18px; align-items:start; }
+
+  /* Table */
+  .table-wrap { background:var(--bg2); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .table-hdr { display:flex; align-items:center; justify-content:space-between; padding:13px 18px; border-bottom:1px solid var(--line); }
+  .table-title { font-size:12px; font-weight:400; letter-spacing:0.1em; color:var(--text2); }
+  .btn-add { background:var(--orange); color:#fff; border:none; border-radius:5px; padding:6px 14px; font-size:12px; font-family:'Noto Sans SC',sans-serif; cursor:pointer; transition:background 0.15s; }
+  .btn-add:hover { background:#e06e22; }
+  table { width:100%; border-collapse:collapse; }
+  thead th { font-size:10px; color:var(--text3); letter-spacing:0.12em; text-transform:uppercase; padding:9px 14px; text-align:left; border-bottom:1px solid var(--line); font-weight:400; }
+  thead th.r { text-align:right; }
+  tbody tr { border-bottom:1px solid var(--line); transition:background 0.12s; }
+  tbody tr:last-child { border-bottom:none; }
+  tbody tr:hover { background:rgba(255,128,48,0.04); }
+  tbody td { padding:10px 14px; font-size:13px; color:var(--text); font-family:'DM Mono',monospace; }
+  td.r{text-align:right;} td.dim{color:var(--text3);} td.note{font-family:'Noto Sans SC',sans-serif;font-size:12px;color:var(--text3);}
+  td.del{text-align:center;cursor:pointer;color:var(--text3);transition:color 0.15s;font-size:14px;padding:10px 8px;width:28px;}
+  td.del:hover{color:var(--red);}
+  .empty td{padding:32px;text-align:center!important;color:var(--text3);font-family:'Noto Sans SC',sans-serif;font-size:13px;}
+
+  /* Right */
+  .right-panel { display:flex; flex-direction:column; gap:14px; }
+  .panel { background:var(--bg2); border:1px solid var(--line); border-radius:8px; padding:16px 18px; }
+  .panel-title { font-size:10px; color:var(--text3); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:13px; }
+  .form-row { margin-bottom:9px; }
+  .form-row label { display:block; font-size:11px; color:var(--text3); margin-bottom:4px; }
+  .form-row input, .form-row textarea {
+    width:100%; background:var(--bg3); border:1px solid var(--line2); border-radius:5px;
+    color:var(--text); font-family:'DM Mono',monospace; font-size:13px;
+    padding:7px 10px; outline:none; transition:border-color 0.15s;
+  }
+  .form-row input:focus,.form-row textarea:focus{border-color:var(--orange);}
+  .form-row textarea{font-family:'Noto Sans SC',sans-serif;resize:none;height:50px;font-size:12px;}
+  input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.4);cursor:pointer;}
+  .btn-submit { width:100%; background:var(--bg3); border:1px solid var(--orange); color:var(--orange); border-radius:5px; padding:8px; font-size:12px; font-family:'Noto Sans SC',sans-serif; cursor:pointer; transition:all 0.15s; letter-spacing:0.1em; margin-top:4px; }
+  .btn-submit:hover{background:var(--orange);color:#fff;}
+  .btn-submit:disabled{opacity:0.5;cursor:not-allowed;}
+
+  /* Detail rows */
+  .dr{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;}
+  .dr:last-child{border-bottom:none;}
+  .dr .l{color:var(--text2);} .dr .v{font-family:'DM Mono',monospace;font-size:13px;color:var(--text);}
+  .dr .v.orange{color:var(--orange);} .dr .v.green{color:var(--green);} .dr .v.red{color:var(--red);} .dr .v.dim{color:var(--text3);}
+  .dr.sub{padding-left:12px;} .dr.sub .l{font-size:11px;color:var(--text3);} .dr.sub .v{font-size:11px;}
+  .dr.total .l{color:var(--text);font-weight:500;font-size:13px;} .dr.total .v{font-size:15px;}
+  .dr.warn{background:rgba(224,85,85,0.07);border-radius:4px;padding:5px 8px;margin:2px 0;border-bottom:none;}
+  .dr.warn .l,.dr.warn .v{color:var(--red);font-size:11px;}
+  hr.sep{border:none;border-top:1px solid var(--line2);margin:3px 0;}
+
+  @media(max-width:820px){
+    .summary-grid{grid-template-columns:repeat(3,1fr);}
+    .main-cols{grid-template-columns:1fr;}
+    header,.container{padding:14px 16px;}
+    .setting-group{padding:6px 12px;}
+    input[type="range"]{width:80px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="loading-bar" id="loader"></div>
+<div id="toast"></div>
+
+<!-- Setup Overlay -->
+<div id="setup-overlay">
+  <div class="setup-box">
+    <h2>连接数据库</h2>
+    <p>首次使用需填入你的 Supabase 项目信息。填写一次后自动保存，之后直接打开即可。<br>
+    还没有项目？<a href="https://supabase.com" target="_blank">免费注册 Supabase →</a></p>
+    <div class="setup-field">
+      <label>Project URL</label>
+      <input type="text" id="sb-url" placeholder="https://xxxxxxxxxxxx.supabase.co">
+    </div>
+    <div class="setup-field">
+      <label>Anon Public Key</label>
+      <input type="text" id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIs...">
+    </div>
+    <button class="btn-connect" onclick="connectSupabase()">连接并进入</button>
+    <div class="setup-status" id="setup-status"></div>
+  </div>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">❤</div>
+    <div>
+      <div class="logo-text">开心❤桌游吧</div>
+      <div class="logo-sub">利润分配记录</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="month-nav">
+      <button onclick="prevMonth()">&#8249;</button>
+      <span id="month-label"></span>
+      <button onclick="nextMonth()">&#8250;</button>
+    </div>
+    <button class="btn-settings" onclick="resetConnection()" title="重置数据库连接">⚙</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="settings-bar">
+    <span class="settings-title">参数设置</span>
+    <div class="setting-group">
+      <span class="setting-lbl">员工底薪</span>
+      <input class="salary-input" type="number" id="cfg-salary" value="4000" min="0" step="100" oninput="saveConfig();render()">
+      <span class="setting-lbl" style="color:var(--text3)">元</span>
+    </div>
+    <div class="setting-group">
+      <span class="setting-lbl">运营备用金</span>
+      <input type="range" id="cfg-reserve" min="0" max="30" step="1" value="10" oninput="saveConfig();render()">
+      <span class="setting-val" id="lbl-reserve">10%</span>
+    </div>
+    <div class="setting-group">
+      <span class="setting-lbl">团队包比例</span>
+      <input type="range" id="cfg-pool" min="5" max="40" step="1" value="15" oninput="saveConfig();render()">
+      <span class="setting-val" id="lbl-pool">15%</span>
+    </div>
+    <div class="setting-group">
+      <span class="setting-lbl">店长占股</span>
+      <input type="range" id="cfg-mgr" min="1" max="49" step="1" value="15" oninput="saveConfig();render()">
+      <span class="setting-val" id="lbl-mgr">15%</span>
+    </div>
+  </div>
+
+  <div class="summary-grid">
+    <div class="card"><div class="card-lbl">月净利润</div><div class="card-val orange" id="s-profit">¥0</div><div class="card-sub" id="s-days">0 天记录</div></div>
+    <div class="card"><div class="card-lbl">扣底薪后</div><div class="card-val" id="s-after">¥0</div><div class="card-sub" id="s-salary-sub">底薪 ¥4,000</div></div>
+    <div class="card"><div class="card-lbl">运营备用金</div><div class="card-val" id="s-reserve">¥0</div><div class="card-sub" id="s-reserve-sub">× 10%</div></div>
+    <div class="card"><div class="card-lbl">团队包</div><div class="card-val" id="s-pool">¥0</div><div class="card-sub" id="s-pool-sub">剩余 × 15%</div></div>
+    <div class="card"><div class="card-lbl">你的分红</div><div class="card-val green" id="s-owner">¥0</div><div class="card-sub" id="s-owner-sub">分红池 × 85%</div></div>
+    <div class="card"><div class="card-lbl">店长总收入</div><div class="card-val" id="s-mgr">¥0</div><div class="card-sub">团队包 + 分红</div></div>
+  </div>
+
+  <div class="dist-wrap">
+    <div class="dist-lbl">本月净利润去向</div>
+    <div class="dist-bar">
+      <div id="b-salary"  style="background:#5a3a10;"></div>
+      <div id="b-reserve" style="background:#104040;"></div>
+      <div id="b-pool"    style="background:#6a4a10;"></div>
+      <div id="b-owner"   style="background:#154530;"></div>
+      <div id="b-mgr"     style="background:#501a10;"></div>
+    </div>
+    <div class="dist-legend">
+      <div class="leg-item"><div class="leg-dot" style="background:#5a3a10"></div>员工底薪<span class="leg-val" id="l-salary">¥0</span></div>
+      <div class="leg-item"><div class="leg-dot" style="background:#104040"></div>运营备用金<span class="leg-val" id="l-reserve">¥0</span></div>
+      <div class="leg-item"><div class="leg-dot" style="background:#6a4a10"></div>团队包<span class="leg-val" id="l-pool">¥0</span></div>
+      <div class="leg-item"><div class="leg-dot" style="background:#154530"></div>你的分红<span class="leg-val" id="l-owner">¥0</span></div>
+      <div class="leg-item"><div class="leg-dot" style="background:#501a10"></div>店长分红<span class="leg-val" id="l-mgr">¥0</span></div>
+    </div>
+  </div>
+
+  <div class="main-cols">
+    <div class="table-wrap">
+      <div class="table-hdr">
+        <span class="table-title">每日收入记录</span>
+        <button class="btn-add" onclick="document.getElementById('f-revenue').focus()">＋ 添加</button>
+      </div>
+      <table>
+        <thead><tr><th>日期</th><th class="r">营业收入</th><th class="r">成本支出</th><th class="r">净利润</th><th>备注</th><th></th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="right-panel">
+      <div class="panel">
+        <div class="panel-title">录入当日数据</div>
+        <div class="form-row"><label>日期</label><input type="date" id="f-date"></div>
+        <div class="form-row"><label>营业收入（元）</label><input type="number" id="f-revenue" placeholder="0" min="0" step="1"></div>
+        <div class="form-row"><label>成本支出（元）</label><input type="number" id="f-cost" placeholder="0" min="0" step="1"></div>
+        <div class="form-row"><label>备注</label><textarea id="f-note" placeholder="可选..."></textarea></div>
+        <button class="btn-submit" id="btn-submit" onclick="addEntry()">确认录入</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">本月分配明细</div>
+        <div class="dr"><span class="l">月净利润</span><span class="v orange" id="d-profit">¥0</span></div>
+        <div class="dr sub"><span class="l">① 优先扣除员工底薪</span><span class="v dim" id="d-salary-deduct">− ¥4,000</span></div>
+        <div class="dr warn" id="d-warn" style="display:none"><span class="l">⚠ 利润不足，需补贴差额</span><span class="v" id="d-shortfall"></span></div>
+        <div class="dr"><span class="l">扣薪后可分配</span><span class="v" id="d-after">¥0</span></div>
+        <hr class="sep">
+        <div class="dr"><span class="l" id="lbl-reserve-row">② 运营备用金 (10%)</span><span class="v dim" id="d-reserve">¥0</span></div>
+        <div class="dr"><span class="l">分配基数</span><span class="v" id="d-remain">¥0</span></div>
+        <hr class="sep">
+        <div class="dr"><span class="l" id="lbl-pool-row">③ 团队包 (×15%)</span><span class="v dim" id="d-pool">¥0</span></div>
+        <div class="dr sub"><span class="l">员工绩效奖金</span><span class="v dim">店长自定</span></div>
+        <div class="dr sub"><span class="l">店长团队包收入</span><span class="v" id="d-mgr-pool">¥0 (上限)</span></div>
+        <hr class="sep">
+        <div class="dr"><span class="l">④ 分红池</span><span class="v" id="d-divpool">¥0</span></div>
+        <div class="dr sub"><span class="l">你 (<span id="lbl-opct">85</span>%)</span><span class="v green" id="d-owner">¥0</span></div>
+        <div class="dr sub"><span class="l">店长 (<span id="lbl-mpct">15</span>%)</span><span class="v" id="d-mgr-div">¥0</span></div>
+        <hr class="sep">
+        <div class="dr total"><span class="l">店长合计收入</span><span class="v orange" id="d-mgr-total">¥0</span></div>
+        <div class="dr total"><span class="l">你的到手分红</span><span class="v green" id="d-owner-total">¥0</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Supabase ──
+const SB_URL_KEY = 'kxb_sb_url';
+const SB_KEY_KEY = 'kxb_sb_key';
+let supabase = null;
+
+function getCredentials(){
+  return {
+    url: localStorage.getItem(SB_URL_KEY)||'',
+    key: localStorage.getItem(SB_KEY_KEY)||''
+  };
+}
+
+async function connectSupabase(){
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  const st  = document.getElementById('setup-status');
+  if(!url||!key){ st.textContent='请填写完整'; st.className='setup-status err'; return; }
+  st.textContent='连接中...'; st.className='setup-status';
+  try{
+    supabase = window.supabase.createClient(url, key);
+    // test connection
+    const {error} = await supabase.from('daily_entries').select('id').limit(1);
+    if(error && error.code==='42P01'){
+      // table doesn't exist — create it
+      st.textContent='正在初始化数据库...';
+      const {error:e2} = await supabase.rpc('exec_sql',{sql:`
+        create table if not exists daily_entries (
+          id bigint generated always as identity primary key,
+          entry_date date not null,
+          revenue numeric not null default 0,
+          cost numeric not null default 0,
+          note text,
+          created_at timestamptz default now()
+        );
+      `});
+      // if rpc not available, show manual instruction
+      if(e2){ st.innerHTML='请在 Supabase 控制台 SQL Editor 中运行初始化语句（见部署文档）'; st.className='setup-status err'; return; }
+    } else if(error){ throw error; }
+    localStorage.setItem(SB_URL_KEY, url);
+    localStorage.setItem(SB_KEY_KEY, key);
+    st.textContent='连接成功！'; st.className='setup-status ok';
+    setTimeout(()=>{ document.getElementById('setup-overlay').classList.add('hidden'); render(); }, 700);
+  } catch(e){
+    st.textContent='连接失败：'+e.message; st.className='setup-status err';
+  }
+}
+
+function resetConnection(){
+  if(!confirm('重置数据库连接？（不会删除数据）'))return;
+  localStorage.removeItem(SB_URL_KEY); localStorage.removeItem(SB_KEY_KEY);
+  location.reload();
+}
+
+// ── Config (localStorage) ──
+const CFG_KEY='kxb_config';
+let cfg={salary:4000,reserve:10,pool:15,mgr:15};
+function loadConfig(){
+  try{ const s=localStorage.getItem(CFG_KEY); if(s) cfg={...cfg,...JSON.parse(s)}; }catch{}
+  document.getElementById('cfg-salary').value=cfg.salary;
+  document.getElementById('cfg-reserve').value=cfg.reserve;
+  document.getElementById('cfg-pool').value=cfg.pool;
+  document.getElementById('cfg-mgr').value=cfg.mgr;
+}
+function saveConfig(){
+  cfg.salary=parseFloat(document.getElementById('cfg-salary').value)||0;
+  cfg.reserve=parseInt(document.getElementById('cfg-reserve').value);
+  cfg.pool=parseInt(document.getElementById('cfg-pool').value);
+  cfg.mgr=parseInt(document.getElementById('cfg-mgr').value);
+  localStorage.setItem(CFG_KEY,JSON.stringify(cfg));
+}
+
+// ── Month ──
+let currentYear, currentMonth;
+function prevMonth(){ if(--currentMonth<1){currentMonth=12;currentYear--;} render(); }
+function nextMonth(){ if(++currentMonth>12){currentMonth=1;currentYear++;} render(); }
+
+// ── Data (Supabase) ──
+let cachedData=[];
+async function fetchData(){
+  if(!supabase) return;
+  setLoader(30);
+  const from=`${currentYear}-${String(currentMonth).padStart(2,'0')}-01`;
+  const lastDay=new Date(currentYear,currentMonth,0).getDate();
+  const to=`${currentYear}-${String(currentMonth).padStart(2,'0')}-${lastDay}`;
+  const {data,error}=await supabase.from('daily_entries')
+    .select('*').gte('entry_date',from).lte('entry_date',to).order('entry_date');
+  setLoader(100);
+  if(error){ toast('读取失败: '+error.message,'err'); return; }
+  cachedData=(data||[]).map(r=>({
+    id:r.id, date:r.entry_date, revenue:Number(r.revenue), cost:Number(r.cost), note:r.note||''
+  }));
+  renderTable();
+  renderCalc();
+}
+
+async function addEntry(){
+  if(!supabase) return;
+  const date=document.getElementById('f-date').value;
+  const revenue=parseFloat(document.getElementById('f-revenue').value)||0;
+  const cost=parseFloat(document.getElementById('f-cost').value)||0;
+  const note=document.getElementById('f-note').value.trim();
+  if(!date){alert('请选择日期');return;}
+  if(revenue===0&&cost===0){alert('请输入收入或支出');return;}
+
+  const [y,m]=date.split('-').map(Number);
+  if(y!==currentYear||m!==currentMonth){
+    if(!confirm(`日期 ${date} 不属于当前查看月份，仍然录入？`))return;
+  }
+
+  // check existing same date
+  const existing=cachedData.find(e=>e.date===date);
+  if(existing){
+    if(!confirm(`${date} 已有记录，追加到当日？`))return;
+    const {error}=await supabase.from('daily_entries').update({
+      revenue: existing.revenue+revenue,
+      cost: existing.cost+cost,
+      note: existing.note?(existing.note+(note?'; '+note:'')):(note||existing.note)
+    }).eq('id',existing.id);
+    if(error){toast('保存失败: '+error.message,'err');return;}
+  } else {
+    const {error}=await supabase.from('daily_entries').insert({entry_date:date,revenue,cost,note});
+    if(error){toast('保存失败: '+error.message,'err');return;}
+  }
+
+  document.getElementById('f-revenue').value='';
+  document.getElementById('f-cost').value='';
+  document.getElementById('f-note').value='';
+  toast('已保存');
+  await fetchData();
+}
+
+async function deleteEntry(id){
+  if(!confirm('确认删除这条记录？'))return;
+  const {error}=await supabase.from('daily_entries').delete().eq('id',id);
+  if(error){toast('删除失败: '+error.message,'err');return;}
+  toast('已删除');
+  await fetchData();
+}
+
+// ── Calc ──
+function calc(entries){
+  const salary=cfg.salary, reservePct=cfg.reserve/100, poolPct=cfg.pool/100, mgrPct=cfg.mgr/100, ownerPct=1-mgrPct;
+  const profit=entries.reduce((s,e)=>s+(e.revenue-e.cost),0);
+  const afterSalary=profit-salary;
+  const shortfall=afterSalary<0?Math.abs(afterSalary):0;
+  const base=Math.max(0,afterSalary);
+  const reserve=base*reservePct, remain=base-reserve, pool=remain*poolPct;
+  const divPool=remain-pool, ownerDiv=divPool*ownerPct, mgrDiv=divPool*mgrPct;
+  return{profit,salary,afterSalary,shortfall,base,reserve,remain,pool,divPool,ownerDiv,mgrDiv,mgrTotal:pool+mgrDiv,ownerPct,mgrPct};
+}
+
+// ── Render ──
+function fmt(n){ const a=Math.abs(Math.round(n)); return(n<0?'−':'')+'¥'+a.toLocaleString('zh-CN'); }
+function fmtSigned(n){ const a=Math.abs(Math.round(n)); return(n>=0?'+':'−')+'¥'+a.toLocaleString('zh-CN'); }
+
+function render(){
+  const months=['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+  document.getElementById('month-label').textContent=`${currentYear} · ${months[currentMonth-1]}`;
+  document.getElementById('lbl-reserve').textContent=cfg.reserve+'%';
+  document.getElementById('lbl-pool').textContent=cfg.pool+'%';
+  document.getElementById('lbl-mgr').textContent=cfg.mgr+'%';
+  fetchData();
+}
+
+function renderCalc(){
+  const c=calc(cachedData);
+  document.getElementById('s-profit').textContent=fmt(c.profit);
+  document.getElementById('s-days').textContent=cachedData.length+' 天记录';
+  document.getElementById('s-after').textContent=fmt(c.afterSalary);
+  document.getElementById('s-after').className='card-val '+(c.afterSalary<0?'red':'');
+  document.getElementById('s-salary-sub').textContent='底薪 ¥'+Math.round(cfg.salary).toLocaleString('zh-CN');
+  document.getElementById('s-reserve').textContent=fmt(c.reserve);
+  document.getElementById('s-reserve-sub').textContent='× '+cfg.reserve+'%';
+  document.getElementById('s-pool').textContent=fmt(c.pool);
+  document.getElementById('s-pool-sub').textContent='剩余 × '+cfg.pool+'%';
+  document.getElementById('s-owner').textContent=fmt(c.ownerDiv);
+  document.getElementById('s-owner-sub').textContent='分红池 × '+Math.round(c.ownerPct*100)+'%';
+  document.getElementById('s-mgr').textContent=fmt(c.mgrTotal);
+
+  if(c.profit>0){
+    const sal=Math.min(c.salary,c.profit);
+    document.getElementById('b-salary').style.width=(sal/c.profit*100)+'%';
+    document.getElementById('b-reserve').style.width=(c.reserve/c.profit*100)+'%';
+    document.getElementById('b-pool').style.width=(c.pool/c.profit*100)+'%';
+    document.getElementById('b-owner').style.width=(c.ownerDiv/c.profit*100)+'%';
+    document.getElementById('b-mgr').style.width=(c.mgrDiv/c.profit*100)+'%';
+  } else {
+    ['b-salary','b-reserve','b-pool','b-owner','b-mgr'].forEach(id=>document.getElementById(id).style.width='0%');
+  }
+  document.getElementById('l-salary').textContent=fmt(Math.min(c.salary,Math.max(0,c.profit)));
+  document.getElementById('l-reserve').textContent=fmt(c.reserve);
+  document.getElementById('l-pool').textContent=fmt(c.pool);
+  document.getElementById('l-owner').textContent=fmt(c.ownerDiv);
+  document.getElementById('l-mgr').textContent=fmt(c.mgrDiv);
+
+  document.getElementById('d-profit').textContent=fmt(c.profit);
+  document.getElementById('d-salary-deduct').textContent='− ¥'+Math.round(c.salary).toLocaleString('zh-CN');
+  document.getElementById('d-after').textContent=fmt(c.afterSalary);
+  document.getElementById('d-after').className='v '+(c.afterSalary<0?'red':'');
+  const we=document.getElementById('d-warn');
+  if(c.shortfall>0){we.style.display='flex';document.getElementById('d-shortfall').textContent=fmt(c.shortfall);}else{we.style.display='none';}
+  document.getElementById('lbl-reserve-row').textContent=`② 运营备用金 (${cfg.reserve}%)`;
+  document.getElementById('d-reserve').textContent=fmt(c.reserve);
+  document.getElementById('d-remain').textContent=fmt(c.remain);
+  document.getElementById('lbl-pool-row').textContent=`③ 团队包 (×${cfg.pool}%)`;
+  document.getElementById('d-pool').textContent=fmt(c.pool);
+  document.getElementById('d-mgr-pool').textContent=fmt(c.pool)+' (上限)';
+  document.getElementById('d-divpool').textContent=fmt(c.divPool);
+  document.getElementById('lbl-opct').textContent=Math.round(c.ownerPct*100);
+  document.getElementById('lbl-mpct').textContent=Math.round(c.mgrPct*100);
+  document.getElementById('d-owner').textContent=fmt(c.ownerDiv);
+  document.getElementById('d-mgr-div').textContent=fmt(c.mgrDiv);
+  document.getElementById('d-mgr-total').textContent=fmt(c.mgrTotal);
+  document.getElementById('d-owner-total').textContent=fmt(c.ownerDiv);
+}
+
+function renderTable(){
+  const tbody=document.getElementById('tbody');
+  if(cachedData.length===0){
+    tbody.innerHTML='<tr class="empty"><td colspan="6">本月暂无记录，点击右上角「添加」开始录入</td></tr>';
+    return;
+  }
+  tbody.innerHTML=cachedData.map(e=>{
+    const net=e.revenue-e.cost;
+    const nc=net>=0?'color:var(--green)':'color:var(--red)';
+    return`<tr>
+      <td class="dim">${e.date.slice(5).replace('-','/')}</td>
+      <td class="r">${fmt(e.revenue)}</td>
+      <td class="r dim">${fmt(e.cost)}</td>
+      <td class="r" style="${nc}">${fmtSigned(net)}</td>
+      <td class="note">${e.note||'—'}</td>
+      <td class="del" onclick="deleteEntry(${e.id})">×</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Loader & Toast ──
+let loaderTimer;
+function setLoader(pct){
+  const el=document.getElementById('loader');
+  el.style.width=pct+'%';
+  el.classList.remove('done');
+  if(pct>=100){ clearTimeout(loaderTimer); loaderTimer=setTimeout(()=>el.classList.add('done'),400); }
+}
+let toastTimer;
+function toast(msg,type){
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.style.color=type==='err'?'var(--red)':'var(--green)';
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2500);
+}
+
+// ── Init ──
+(function(){
+  const now=new Date();
+  currentYear=now.getFullYear();
+  currentMonth=now.getMonth()+1;
+  document.getElementById('f-date').value=now.toISOString().slice(0,10);
+  loadConfig();
+
+  const {url,key}=getCredentials();
+  if(url&&key){
+    supabase=window.supabase.createClient(url,key);
+    document.getElementById('setup-overlay').classList.add('hidden');
+    render();
+  } else {
+    document.getElementById('sb-url').value=url;
+    document.getElementById('sb-key').value=key;
+  }
+})();
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&document.activeElement.id.startsWith('f-')) addEntry();
+});
+</script>
+</body>
+</html>
